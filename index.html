@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Радио РБК — прямой эфир</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='7' fill='%23e30613'/%3E%3C/svg%3E">
+  <style>
+    body { font-family: system-ui, sans-serif; display: flex; flex-direction: column;
+           align-items: center; justify-content: center; min-height: 100vh; margin: 0;
+           background: #111; color: #eee; }
+    h1 { font-size: 22px; font-weight: 500; margin-bottom: 24px; }
+    button { font-size: 20px; padding: 14px 40px; border-radius: 8px; border: 0;
+             background: #e30613; color: white; cursor: pointer; transition: opacity .15s; }
+    button:hover { opacity: 0.9; }
+    #status { margin-top: 16px; color: #aaa; font-size: 14px; min-height: 20px; }
+    #meta { margin-top: 8px; color: #666; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <h1>Радио РБК</h1>
+  <audio id="player" preload="none" playsinline></audio>
+  <button id="btn">▶ Слушать</button>
+  <div id="status">Нажмите «Слушать»</div>
+  <div id="meta">Москва 92.8 FM · Санкт-Петербург 102.0 FM · Нижний Новгород 107.4 FM — одна трансляция</div>
+
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
+  <script>
+    const STREAM_URL = 'https://hls-01-rbc.hostingradio.ru/rbc-fed0/112/playlist.m3u8';
+    const audio = document.getElementById('player');
+    const btn = document.getElementById('btn');
+    const statusEl = document.getElementById('status');
+
+    let hls = null;
+    let playing = false;
+
+    const setStatus = t => { statusEl.textContent = t; };
+
+    function startNative() {
+      audio.src = STREAM_URL;
+      audio.play().catch(e => setStatus('Ошибка: ' + e.message));
+    }
+
+    function startHlsJs() {
+      hls = new Hls({ lowLatencyMode: true, maxBufferLength: 12, liveSyncDuration: 2 });
+      hls.loadSource(STREAM_URL);
+      hls.attachMedia(audio);
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        audio.play().catch(e => setStatus('Ошибка: ' + e.message));
+      });
+      hls.on(Hls.Events.ERROR, (_, data) => {
+        if (data.fatal) {
+          setStatus('Переподключение…');
+          setTimeout(() => {
+            if (hls) { hls.destroy(); startHlsJs(); }
+          }, 2500);
+        }
+      });
+    }
+
+    function start() {
+      setStatus('Подключение…');
+      if (audio.canPlayType('application/vnd.apple.mpegurl')) {
+        startNative();
+      } else if (window.Hls && Hls.isSupported()) {
+        startHlsJs();
+      } else {
+        setStatus('Браузер не поддерживает HLS');
+        return;
+      }
+      playing = true;
+      btn.textContent = '⏸ Пауза';
+    }
+
+    function stop() {
+      if (hls) { hls.destroy(); hls = null; }
+      audio.pause();
+      audio.removeAttribute('src');
+      audio.load();
+      playing = false;
+      btn.textContent = '▶ Слушать';
+      setStatus('Пауза');
+    }
+
+    btn.addEventListener('click', () => playing ? stop() : start());
+    audio.addEventListener('playing', () => setStatus('В эфире'));
+    audio.addEventListener('waiting', () => setStatus('Буферизация…'));
+    audio.addEventListener('error', () => {
+      if (playing) setStatus('Ошибка потока');
+    });
+  </script>
+</body>
+</html>
